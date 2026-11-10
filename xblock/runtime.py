@@ -11,7 +11,6 @@ import itertools
 import json
 import logging
 import re
-import threading
 import warnings
 
 from lxml import etree
@@ -179,7 +178,7 @@ class KvsFieldData(FieldData):
         key = KeyValueStore.Key(
             scope=field.scope,
             user_id=user_id,
-            block_scope_id=block_id,
+            block_scope_id=block_id,  # pylint: disable=possibly-used-before-assignment
             field_name=name,
             block_family=block.entry_point,
         )
@@ -517,8 +516,8 @@ class Runtime(metaclass=ABCMeta):
 
     # Construction
     def __init__(
-            self, id_reader, field_data=None, mixins=(), services=None,
-            default_class=None, select=None, id_generator=None
+            self, id_reader, id_generator, field_data=None, mixins=(),
+            services=None, default_class=None, select=None
     ):
         """
         Arguments:
@@ -541,9 +540,9 @@ class Runtime(metaclass=ABCMeta):
             default_class (class): The default class to use if a class can't be found for a
                 particular `block_type` when loading an :class:`.XBlock`.
 
-            select: A function to select from one or more :class:`.XBlock` subtypes found
-                when calling :meth:`.XBlock.load_class` to resolve a `block_type`.
-                This is the same `select` as used by :meth:`.Plugin.load_class`.
+            select: A function to select from one or more XBlock-like subtypes found
+                when calling :meth:`.XBlock.load_class` or :meth:`.XBlockAside.load_class`
+                to resolve a `block_type`.
 
         """
         self.id_reader = id_reader
@@ -569,8 +568,6 @@ class Runtime(metaclass=ABCMeta):
         self._view_name = None
 
         self.id_generator = id_generator
-        if id_generator is None:
-            warnings.warn("IdGenerator will be required in the future in order to support XBlockAsides", FutureWarning)
 
     # Block operations
 
@@ -704,54 +701,33 @@ class Runtime(metaclass=ABCMeta):
 
     # Parsing XML
 
-    def parse_xml_string(self, xml, id_generator=None):
+    def parse_xml_string(self, xml):
         """Parse a string of XML, returning a usage id."""
-        if id_generator is not None:
-            warnings.warn(
-                "Passing an id_generator directly is deprecated "
-                "in favor of constructing the Runtime with the id_generator",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
-        id_generator = id_generator or self.id_generator
         if isinstance(xml, bytes):
             io_type = BytesIO
         else:
             io_type = StringIO
-        return self.parse_xml_file(io_type(xml), id_generator)
+        return self.parse_xml_file(io_type(xml))
 
-    def parse_xml_file(self, fileobj, id_generator=None):
+    def parse_xml_file(self, fileobj):
         """Parse an open XML file, returning a usage id."""
         root = etree.parse(fileobj).getroot()
-        usage_id = self._usage_id_from_node(root, None, id_generator)
+        usage_id = self._usage_id_from_node(root, None)
         return usage_id
 
-    def _usage_id_from_node(self, node, parent_id, id_generator=None):
+    def _usage_id_from_node(self, node, parent_id):
         """Create a new usage id from an XML dom node.
 
         Args:
             node (lxml.etree.Element): The DOM node to interpret.
             parent_id: The usage ID of the parent block
-            id_generator (IdGenerator): The :class:`.IdGenerator` to use
-                for creating ids
         """
-        if id_generator is not None:
-            warnings.warn(
-                "Passing an id_generator directly is deprecated "
-                "in favor of constructing the Runtime with the id_generator",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-
-        id_generator = id_generator or self.id_generator
-
         block_type = node.tag
         # remove xblock-family from elements
         node.attrib.pop('xblock-family', None)
         # TODO: a way for this node to be a usage to an existing definition?
-        def_id = id_generator.create_definition(block_type)
-        usage_id = id_generator.create_usage(def_id)
+        def_id = self.id_generator.create_definition(block_type)
+        usage_id = self.id_generator.create_usage(def_id)
         keys = ScopeIds(None, block_type, def_id, usage_id)
         block_class = self.mixologist.mix(self.load_block_type(block_type))
         # pull the asides out of the xml payload
@@ -765,31 +741,30 @@ class Runtime(metaclass=ABCMeta):
                     aside_children.append(child)
         # now process them & remove them from the xml payload
         for child in aside_children:
-            self._aside_from_xml(child, def_id, usage_id, id_generator)
+            self._aside_from_xml(child, def_id, usage_id)
             node.remove(child)
-        block = block_class.parse_xml(node, self, keys, id_generator)
+        block = block_class.parse_xml(node, self, keys)
         block.parent = parent_id
         block.save()
         return usage_id
 
-    def _aside_from_xml(self, node, block_def_id, block_usage_id, id_generator):
+    def _aside_from_xml(self, node, block_def_id, block_usage_id):
         """
         Create an aside from the xml and attach it to the given block
         """
-        id_generator = id_generator or self.id_generator
 
         aside_type = node.tag
         aside_class = self.load_aside_type(aside_type)
-        aside_def_id, aside_usage_id = id_generator.create_aside(block_def_id, block_usage_id, aside_type)
+        aside_def_id, aside_usage_id = self.id_generator.create_aside(block_def_id, block_usage_id, aside_type)
         keys = ScopeIds(None, aside_type, aside_def_id, aside_usage_id)
-        aside = aside_class.parse_xml(node, self, keys, id_generator)
+        aside = aside_class.parse_xml(node, self, keys)
         aside.save()
 
-    def add_node_as_child(self, block, node, id_generator=None):
+    def add_node_as_child(self, block, node):
         """
         Called by XBlock.parse_xml to treat a child node as a child block.
         """
-        usage_id = self._usage_id_from_node(node, block.scope_ids.usage_id, id_generator)
+        usage_id = self._usage_id_from_node(node, block.scope_ids.usage_id)
         block.children.append(usage_id)
 
     # Exporting XML
@@ -1219,6 +1194,11 @@ class ObjectAggregator:
     """
 
     def __init__(self, *objects):
+        warnings.warn(
+            "ObjectAggregator is deprecated and will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.__dict__['_objects'] = objects
 
     def _object_with_attr(self, name):
@@ -1245,9 +1225,11 @@ class ObjectAggregator:
         delattr(self._object_with_attr(name), name)
 
 
-# Cache of Mixologist generated classes
+# Cache of Mixologist generated classes.
+# dict.setdefault() is atomic under CPython's GIL, so no lock is needed here.
+# This is also safe in asyncio contexts: mix() has no await points, so the
+# event loop cannot interleave two calls to it within the same thread.
 _CLASS_CACHE = {}
-_CLASS_CACHE_LOCK = threading.RLock()
 
 
 class Mixologist:
@@ -1301,18 +1283,16 @@ class Mixologist:
         mixin_key = (base_class, mixins)
 
         if mixin_key not in _CLASS_CACHE:
-            # Only lock if we're about to make a new class
-            with _CLASS_CACHE_LOCK:
-                # Use setdefault so that if someone else has already
-                # created a class before we got the lock, we don't
-                # overwrite it
-                return _CLASS_CACHE.setdefault(mixin_key, type(
-                    base_class.__name__ + 'WithMixins',  # type() requires native str
-                    (base_class,) + mixins,
-                    {'unmixed_class': base_class}
-                ))
-        else:
-            return _CLASS_CACHE[mixin_key]
+            new_class = type(
+                base_class.__name__ + 'WithMixins',  # type() requires native str
+                (base_class,) + mixins,
+                {'unmixed_class': base_class}
+            )
+            # setdefault is atomic under CPython's GIL: if two threads race
+            # here, one wins and the other's new_class is silently discarded.
+            _CLASS_CACHE.setdefault(mixin_key, new_class)
+
+        return _CLASS_CACHE[mixin_key]
 
 
 class RegexLexer:
@@ -1356,6 +1336,19 @@ class NullI18nService:
         format = self.STRFTIME_FORMATS.get(format + "_FORMAT", format)
         timestring = dtime.strftime(format)
         return timestring
+
+    def get_javascript_i18n_catalog_url(self, block):  # pylint: disable=unused-argument
+        """
+        Return the URL to the JavaScript i18n catalog file.
+
+        Args:
+            block (XBlock): The block that is requesting the URL.
+
+        This method returns None in NullI18nService. When implemented in
+        a runtime, it should return the URL to the JavaScript i18n catalog so
+        it can be loaded in frontends.
+        """
+        return None
 
     @property
     def ugettext(self):

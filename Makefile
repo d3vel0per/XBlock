@@ -1,5 +1,5 @@
 # Do things in edx-platform
-.PHONY: clean docs help package quality requirements test upgrade
+.PHONY: clean docs help package quality requirements test upgrade validate
 
 .DEFAULT_GOAL := help
 
@@ -21,7 +21,9 @@ help: ## display this help message
 
 quality: ## check coding style with pycodestyle and pylint
 	pycodestyle
-	pylint xblock
+	pylint xblock web_fragments
+
+validate: test
 
 test: ## run tests on every supported Python/Django combination
 	tox
@@ -31,20 +33,8 @@ docs: ## generate Sphinx HTML documentation, including API docs
 	$(BROWSER) docs/_build/html/index.html
 
 requirements: ## install development environment requirements
-	pip install -qr requirements/dev.txt --exists-action w
-	pip install -e .
+	uv sync --group dev
 
-upgrade: export CUSTOM_COMPILE_COMMAND=make upgrade
-upgrade: ## update the pip requirements files to use the latest releases satisfying our constraints
-	pip install -qr requirements/pip-tools.txt
-	# Make sure to compile files after any other files they include!
-	pip-compile -v --upgrade --rebuild -o requirements/pip-tools.txt requirements/pip-tools.in
-	pip-compile -v --upgrade --rebuild -o requirements/base.txt requirements/base.in
-	pip-compile -v --upgrade --rebuild -o requirements/django.txt requirements/django.in
-	pip-compile -v --upgrade --rebuild -o requirements/test.txt requirements/test.in
-	pip-compile -v --upgrade --rebuild -o requirements/doc.txt requirements/doc.in
-	pip-compile -v --upgrade --rebuild -o requirements/ci.txt requirements/ci.in
-	pip-compile -v --upgrade --rebuild -o requirements/dev.txt requirements/dev.in
-	# Let tox control the Django version for tests
-	sed '/^[dD]jango==/d' requirements/test.txt > requirements/test.tmp
-	mv requirements/test.tmp requirements/test.txt
+upgrade: ## update the uv.lock to use the latest releases satisfying our constraints
+	uv run --with edx-lint edx_lint write_uv_constraints pyproject.toml
+	uv lock --upgrade

@@ -375,7 +375,10 @@ class Dynamic:
 
 class TestObjectAggregator:
     """
-    Test that the ObjectAggregator behaves correctly
+    Test that the ObjectAggregator behaves correctly.
+
+    ObjectAggregator is deprecated; all instantiations are wrapped to assert
+    the expected DeprecationWarning is raised.
     """
     # pylint: disable=attribute-defined-outside-init
     def setup_method(self):
@@ -385,7 +388,8 @@ class TestObjectAggregator:
         # Create some objects that only have single attributes
         self.first = Dynamic(first=1)
         self.second = Dynamic(second=2)
-        self.agg = ObjectAggregator(self.first, self.second)
+        with pytest.warns(DeprecationWarning, match="ObjectAggregator is deprecated"):
+            self.agg = ObjectAggregator(self.first, self.second)
     # pylint: enable=attribute-defined-outside-init
 
     def test_get(self):
@@ -523,6 +527,9 @@ class XBlockWithServices(XBlock):
         assert_equals_unicode("Feb 14, 2013 at 22:30", i18n.strftime(when, "DATE_TIME"))
         assert_equals_unicode("10:30:17 PM", i18n.strftime(when, "TIME"))
 
+        # Runtimes are expected to implement this method though.
+        assert i18n.get_javascript_i18n_catalog_url(object()) is None, 'NullI18nService does not implement this method.'
+
         # secret_service is available.
         assert self.runtime.service(self, "secret_service") == 17
 
@@ -659,13 +666,13 @@ class TestRuntimeDeprecation(WarningTestMixin, TestCase):
     def test_passed_field_data(self):
         field_data = Mock(spec=FieldData)
         with self.assertWarns(FieldDataDeprecationWarning):
-            runtime = TestRuntime(Mock(spec=IdReader), field_data)
+            runtime = TestRuntime(Mock(spec=IdReader), field_data=field_data)
         with self.assertWarns(FieldDataDeprecationWarning):
             self.assertEqual(runtime.field_data, field_data)
 
     def test_set_field_data(self):
         field_data = Mock(spec=FieldData)
-        runtime = TestRuntime(Mock(spec=IdReader), None)
+        runtime = TestRuntime(Mock(spec=IdReader), field_data=None)
         with self.assertWarns(FieldDataDeprecationWarning):
             runtime.field_data = field_data
         with self.assertWarns(FieldDataDeprecationWarning):

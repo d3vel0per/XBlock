@@ -49,8 +49,8 @@ def public(type=None, **kwargs):  # pylint: disable=unused-argument, redefined-b
       Takes two students and returns a number. Specific instances may
       look at e.g. difference in some measure of aptitude, geographic
       distance, culture, or language. See stevedor, as well as queries
-      in https://github.com/edx/insights to understand how this will
-      be used.
+      in https://github.com/edx-unsupported/insights to understand how
+      this will be used.
     """
 
     def wrapper(function):
@@ -114,8 +114,7 @@ class Filesystem(Field):
       `xblock-sdk` do not currently garbage collect them,
       however.
 
-    More information can be found at: http://docs.pyfilesystem.org/en/latest/
-    and https://github.com/pmitros/django-pyfs
+    More information can be found at: https://github.com/openedx/django-pyfs
 
     The major use cases for this are storage of large binary objects,
     pregenerating per-student data (e.g. `pylab` plots), and storing
@@ -171,7 +170,7 @@ class FSService(Service):
     This is a PROTOTYPE service for storing files in XBlock fields.
 
     It returns a file system as per:
-    https://github.com/pmitros/django-pyfs
+    https://github.com/openedx/django-pyfs
 
     1) We want to change how load() works, and specifically how
     prefixes are calculated.
@@ -193,7 +192,7 @@ class FSService(Service):
             return djpyfs.get_filesystem(scope_key(instance, xblock))
         else:
             # The reference implementation relies on djpyfs
-            # https://github.com/edx/django-pyfs
+            # https://github.com/openedx/django-pyfs
             # For Django runtimes, you may use this reference
             # implementation. Otherwise, you will need to
             # patch pyfilesystem yourself to implement get_url.

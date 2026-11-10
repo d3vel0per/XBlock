@@ -1,6 +1,6 @@
 """Django settings for toy runtime project."""
 import os
-from path import Path as path
+from pathlib import Path
 
 DEBUG = True
 
@@ -40,15 +40,11 @@ SITE_ID = 1
 # to load the internationalization machinery.
 USE_I18N = True
 
-# If you set this to False, Django will not format dates, numbers and
-# calendars according to the current locale.
-USE_L10N = True
-
 # If you set this to False, Django will not use timezone-aware datetimes.
 USE_TZ = True
 
-PROJECT_ROOT = path(__file__).abspath().dirname().dirname().dirname()
-LOCALE_PATHS = [str(PROJECT_ROOT + '/xblock/test/locale')]
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+LOCALE_PATHS = [str(PROJECT_ROOT) + '/xblock/test/locale']
 
 # Absolute filesystem path to the directory that will hold user-uploaded files.
 # Example: "/home/media/media.lawrence.com/media/"
@@ -103,12 +99,9 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    # Uncomment the next line to enable the admin:
     'django.contrib.admin',
 
-    # Uncomment the next line to enable admin documentation:
-    # 'django.contrib.admindocs',
+    'web_fragments',
 )
 
 # A sample logging configuration. The only tangible logging
@@ -142,6 +135,16 @@ LOGGING = {
         }
     }
 }
+
+ROOT_URLCONF = 'web_fragments.examples.urls'
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+    },
+]
 
 WORKBENCH = {
     'reset_state_on_restart': (
